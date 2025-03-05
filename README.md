@@ -1,35 +1,37 @@
-# Call Center Dashboard
+# Hope AI - Creative Agent
 
-A sophisticated call center management system with real-time analytics, high-tier contract management, and automated reporting features.
+An AI agent focused on building a career in film production and entertainment, starting from scratch with just a computer and internet connection.
+
+## Overview
+
+Hope is an AI agent designed to demonstrate how modern technology and determination can enable individual creators to compete with large studios. She starts with basic resources and works her way up through various stages of her career, from beginner to producer.
 
 ## Features
 
-- Real-time call center analytics dashboard
-- High-tier contract management
-- Automated reporting system
-- Subscription tier management
-- Market penetration analysis
-- Industry-specific pricing
-- Connection diagnostics utility
+- Career progression system (Beginner → Indie → Professional → Producer)
+- Skill development in multiple areas (acting, directing, video editing, etc.)
+- Strategic decision making based on past experiences
+- Project portfolio management
+- Revenue tracking and analysis
+- Adaptive learning from successes and failures
 
-## Prerequisites
+## Requirements
 
 - Python 3.8+
-- Windows OS (for firewall configuration features)
-- Administrator privileges (for firewall configuration)
+- Dependencies listed in `requirements.txt`
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/call-center-dashboard.git
-cd call-center-dashboard
+git clone https://github.com/yourusername/hope-ai.git
+cd hope-ai
 ```
 
 2. Create a virtual environment:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m venv env
+source env/bin/activate  # On Windows: env\Scripts\activate
 ```
 
 3. Install dependencies:
@@ -39,68 +41,55 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Starting the Dashboard
-
-Run the dashboard manager:
+Run Hope:
 ```bash
-python -m app.utils.dashboard_manager
+python creative_agent/hope_enhanced.py
 ```
 
-The GUI will allow you to:
-- Start/Stop the dashboard server
-- Configure firewall rules
-- Monitor connection status
-- View diagnostic information
+## Career Stages
 
-### Running Diagnostics
+1. **Beginner**
+   - Focus on skill building
+   - Taking small projects
+   - Building initial portfolio
 
-To run connection diagnostics:
-```bash
-python -m app.utils.connection_diagnostics
-```
+2. **Indie**
+   - Larger projects
+   - Building industry connections
+   - Developing unique style
 
-This will:
-- Verify firewall rules
-- Test connections
-- Check port availability
-- Display available IP addresses
+3. **Professional**
+   - Consistent income
+   - Industry recognition
+   - Building team relationships
+
+4. **Producer**
+   - Own production company
+   - Creating original content
+   - Managing larger projects
 
 ## Configuration
 
-The dashboard runs on port 8050 by default. If this port is unavailable, the system will automatically find the next available port.
+Hope's behavior and initial settings can be modified in `hope_enhanced.py`:
+- Work hours per day
+- Initial skill levels
+- Career progression thresholds
+- Revenue sharing ratios
 
-### Firewall Configuration
+## Data Storage
 
-The system automatically configures Windows Firewall rules for:
-- Inbound connections on port 8050
-- TCP protocol
-- All IP addresses
-
-## Development
-
-### Project Structure
-
-```
-app/
-├── components/
-│   └── high_tier_dashboard.py
-├── services/
-│   ├── analytics_service.py
-│   ├── notification_service.py
-│   └── subscription_service.py
-└── utils/
-    ├── connection_diagnostics.py
-    └── dashboard_manager.py
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Hope maintains two main data files:
+- `earnings.json`: Tracks financial and career progress
+- `decisions.json`: Stores learning and strategic decisions
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+Private repository - All rights reserved
+
+## Author
+
+Created by [Your Name]
+
+## Acknowledgments
+
+Special thanks to the original creator who built Hope with determination and vision. 
