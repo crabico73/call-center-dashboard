@@ -10,10 +10,15 @@ class DataService:
     def __init__(self, connection_string: Optional[str] = None):
         """Initialize the data service with database connection"""
         if connection_string is None:
-            # Store database in AppData/Local
-            app_data_dir = os.path.join(os.environ['LOCALAPPDATA'], 'CallCenterDashboard')
-            os.makedirs(app_data_dir, exist_ok=True)
-            db_path = os.path.join(app_data_dir, 'call_center.db')
+            # Store database in project directory
+            db_path = os.path.abspath(os.path.join(
+                os.path.dirname(__file__), 
+                '..', '..', 
+                'data',
+                'call_center.db'
+            ))
+            # Create data directory if it doesn't exist
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
             connection_string = f'sqlite:///{db_path}'
         
         try:
@@ -21,7 +26,7 @@ class DataService:
             # Test the connection
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-            print(f"Successfully connected to database at: {connection_string.replace('sqlite:///', '')}")
+            print(f"Successfully connected to database at: {db_path}")
         except Exception as e:
             print(f"Error connecting to database: {e}")
             raise

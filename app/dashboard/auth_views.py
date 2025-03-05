@@ -2,7 +2,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 from flask_login import login_user, logout_user, current_user
 
-def create_login_layout():
+def create_login_layout(error=None):
     """Create the login page layout"""
     return html.Div([
         html.Div([
@@ -58,7 +58,7 @@ def create_login_layout():
                         "fontSize": "14px"
                     }
                 ),
-                html.Div(id="login-error", 
+                html.Div(error or "", id="login-error", 
                         style={
                             "color": "#d93025",
                             "fontSize": "12px",

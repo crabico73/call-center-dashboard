@@ -15,6 +15,8 @@ from threading import Timer
 from flask_login import LoginManager, current_user, login_user, logout_user, login_required
 from flask import request, session
 from functools import wraps
+from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_cors import CORS
 
 # Initialize services
 data_service = None
@@ -41,37 +43,88 @@ def initialize_services():
         print(f"Failed to initialize services: {e}")
         return False
 
-def open_browser(port):
-    """Open the browser after a short delay"""
-    webbrowser.open(f'http://localhost:{port}/')
+def open_browser(port, browser_name=None):
+    """Open the browser after a short delay
+    Args:
+        port (int): Port number for the server
+        browser_name (str, optional): Browser to use ('firefox', 'chrome', 'edge', 'safari', etc.)
+    """
+    url = f'http://localhost:{port}/login'
+    try:
+        if browser_name:
+            # Get list of available browsers
+            available_browsers = webbrowser._browsers.keys()
+            print("\nAvailable browsers:", ", ".join(available_browsers))
+            
+            if browser_name.lower() in available_browsers:
+                browser = webbrowser.get(browser_name.lower())
+                browser.open(url)
+            else:
+                print(f"\nRequested browser '{browser_name}' not found. Using system default.")
+                webbrowser.open(url)
+        else:
+            # Use system default browser
+            webbrowser.open(url)
+    except Exception as e:
+        print(f"\nWarning: Browser error: {e}. Using system default.")
+        webbrowser.open(url)
 
 # Initialize the Dash app with Bootstrap theme
 app = dash.Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
     suppress_callback_exceptions=True,
-    update_title=None,  # Disable the "Updating..." browser title
-    title="Call Center Dashboard"  # Set the page title
+    update_title=None,
+    title="Call Center Dashboard",
+    meta_tags=[
+        {"name": "viewport", "content": "width=device-width, initial-scale=1"}
+    ],
+    url_base_pathname='/'
 )
 
 # Configure the Flask server
 server = app.server
+
+# Add custom headers to bypass proxy authentication
+@server.after_request
+def add_header(response):
+    response.headers['Proxy-Authenticate'] = 'Basic'
+    response.headers['WWW-Authenticate'] = 'Basic'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
+
 server.config.update(
-    SECRET_KEY='call-center-dashboard-key',  # Use a consistent secret key
+    SECRET_KEY='call-center-dashboard-key',
     SESSION_COOKIE_HTTPONLY=True,
     REMEMBER_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Strict',
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_PROTECTION='strong',
+    # Add proxy bypass settings
+    PROXY_SKIP_VERIFY=True,
+    PREFERRED_URL_SCHEME='http'
 )
+
+# Add CORS support with specific origins
+CORS(server, 
+     resources={
+         r"/*": {
+             "origins": ["http://127.0.0.1:8050", "http://localhost:8050"],
+             "supports_credentials": True
+         }
+     })
 
 # Initialize services before creating layout
 if not initialize_services():
     print("Failed to initialize services. Exiting...")
     sys.exit(1)
 
+# Initialize test database with sample data
+data_service.create_test_database()
+
 # Initialize login manager
 login_manager.init_app(server)
 login_manager.login_view = "/login"
-login_manager.session_protection = "strong"
 
 def is_authenticated():
     """Check if user is authenticated"""
@@ -91,9 +144,9 @@ def require_login(f):
 
 # Add URL location component at the app level
 app.layout = html.Div([
-    dcc.Location(id='url', refresh=True),
-    html.Div(id='page-content'),
-    dcc.Store(id='login-status', storage_type='session', data={'authenticated': False})
+    dcc.Location(id='url', refresh=False),
+    dcc.Store(id='auth-store', storage_type='session'),
+    html.Div(id='page-content')
 ])
 
 def get_dashboard_data():
@@ -262,59 +315,70 @@ def create_dashboard_layout():
         create_change_password_modal()
     ], fluid=True)
 
-# Callback for URL routing
+# Single callback to handle page content
 @app.callback(
-    Output('page-content', 'children'),
-    [Input('url', 'pathname')]
-)
-def display_page(pathname):
-    if pathname == '/login' or not is_authenticated():
-        return create_login_layout()
-    return create_dashboard_layout()
-
-# Callback for login
-@app.callback(
-    [Output('url', 'pathname'),
-     Output('login-error', 'children')],
-    [Input('login-button', 'n_clicks'),
-     Input('username-input', 'n_submit'),
-     Input('password-input', 'n_submit')],
+    [Output('page-content', 'children'),
+     Output('auth-store', 'data')],
+    [Input('url', 'pathname'),
+     Input('login-button', 'n_clicks')],
     [State('username-input', 'value'),
-     State('password-input', 'value')],
+     State('password-input', 'value'),
+     State('auth-store', 'data')],
     prevent_initial_call=True
 )
-def login(n_clicks, username_submit, password_submit, username, password):
-    triggered = [p['prop_id'] for p in dash.callback_context.triggered]
-    if not triggered or (not n_clicks and not username_submit and not password_submit):
-        return dash.no_update, dash.no_update
+def render_page_content(pathname, n_clicks, username, password, auth_data):
+    """Handle page routing and authentication"""
+    ctx = dash.callback_context
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
     
-    if not username or not password:
-        return dash.no_update, "Please enter both username and password"
+    # Initialize auth data
+    if auth_data is None:
+        auth_data = {'authenticated': False}
     
-    user = auth_service.authenticate_user(username, password)
-    if user:
-        login_user(user)
-        return '/dashboard', ""
-    return dash.no_update, "Invalid username or password"
+    # Handle login button click
+    if triggered_id == 'login-button' and n_clicks:
+        if not username or not password:
+            return create_login_layout(error="Please enter both username and password"), auth_data
+            
+        try:
+            user = auth_service.authenticate_user(username, password)
+            if user:
+                login_user(user)
+                session['user_id'] = user.id
+                session.permanent = True
+                auth_data = {'authenticated': True}
+                return create_dashboard_layout(), auth_data
+        except Exception as e:
+            print(f"Login error: {e}")
+            return create_login_layout(error="An error occurred during login"), auth_data
+        
+        return create_login_layout(error="Invalid username or password"), auth_data
+    
+    # Handle page routing based on authentication status
+    if not auth_data.get('authenticated'):
+        return create_login_layout(), auth_data
+    
+    return create_dashboard_layout(), auth_data
 
 # Callback for logout
 @app.callback(
-    Output('url', 'pathname', allow_duplicate=True),
-    Input('logout-button', 'n_clicks'),
+    [Output('url', 'pathname', allow_duplicate=True),
+     Output('auth-store', 'data', allow_duplicate=True)],
+    Input('user-menu-dropdown', 'value'),
     prevent_initial_call=True
 )
-def logout(n_clicks):
-    if n_clicks:
+def handle_menu_click(value):
+    if value == 'logout':
         logout_user()
         session.clear()
-        return '/login'
-    return dash.no_update
+        return '/login', {'authenticated': False}
+    return dash.no_update, dash.no_update
 
 # Callback for change password modal
 @app.callback(
     [Output("change-password-modal", "is_open"),
      Output("change-password-error", "children")],
-    [Input("change-password-button", "n_clicks"),
+    [Input("user-menu-dropdown", "value"),
      Input("change-password-cancel", "n_clicks"),
      Input("change-password-save", "n_clicks")],
     [State("current-password-input", "value"),
@@ -323,14 +387,14 @@ def logout(n_clicks):
      State("change-password-modal", "is_open")],
     prevent_initial_call=True
 )
-def handle_change_password(show_modal, cancel, save, current_pw, new_pw, confirm_pw, is_open):
+def handle_change_password(dropdown_value, cancel, save, current_pw, new_pw, confirm_pw, is_open):
     ctx = dash.callback_context
     if not ctx.triggered:
         return False, ""
     
     button_id = ctx.triggered[0]["prop_id"].split(".")[0]
     
-    if button_id == "change-password-button":
+    if button_id == "user-menu-dropdown" and dropdown_value == "change-password":
         return True, ""
     elif button_id == "change-password-cancel":
         return False, ""
@@ -368,21 +432,54 @@ def update_graphs(n):
     timestamp = "Last updated: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return [timestamp, calls_fig, success_fig, duration_fig, hourly_fig]
 
-def run_dashboard(debug=True, port=8050):
-    """Run the dashboard server"""
+# Add callback to update URL after login/logout
+@app.callback(
+    Output('url', 'pathname', allow_duplicate=True),
+    [Input('page-content', 'children')],
+    prevent_initial_call=True
+)
+def update_url(content):
+    """Update URL based on page content"""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return dash.no_update
+        
+    if isinstance(content, dict) and content.get('props', {}).get('id') == 'redirect-to-login':
+        return '/login'
+    elif is_authenticated():
+        return '/'
+    return dash.no_update
+
+def run_dashboard(debug=True, port=8050, browser=None):
+    """Run the dashboard server
+    Args:
+        debug (bool): Whether to run in debug mode
+        port (int): Port to run the server on
+        browser (str, optional): Browser to use ('firefox', 'chrome', 'edge', 'safari', etc.)
+    """
     print("\n" + "="*50)
     print("Starting dashboard server...")
-    print(f"Dashboard will be available at: http://localhost:{port}")
+    
+    # Detect if running behind proxy
+    proxy_url = os.environ.get('PROXY_URL', f'http://127.0.0.1:{port}')
+    print(f"Dashboard will be available at: {proxy_url}")
+    
     print("\nDefault login credentials:")
     print("Username: admin")
     print("Password: admin123")
     print("="*50 + "\n")
     
-    # Open browser after a short delay
-    Timer(1.5, lambda: webbrowser.open(f'http://localhost:{port}/login')).start()
+    # Only open browser on initial run, not on debug reload
+    if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+        Timer(2, lambda: open_browser(port, browser)).start()
     
     try:
-        app.run_server(debug=debug, port=port, host='localhost')
+        app.run_server(
+            debug=debug,
+            port=port,
+            host='0.0.0.0',  # Listen on all interfaces
+            dev_tools_hot_reload=False
+        )
     except Exception as e:
         print(f"\nError starting server: {e}")
         if "Address already in use" in str(e):
@@ -395,4 +492,11 @@ def run_dashboard(debug=True, port=8050):
         sys.exit(1)
 
 if __name__ == '__main__':
-    run_dashboard() 
+    # Let the system use the default browser
+    run_dashboard()
+    
+    # Or uncomment one of these lines to specify a browser:
+    # run_dashboard(browser='firefox')
+    # run_dashboard(browser='chrome')
+    # run_dashboard(browser='edge')
+    # run_dashboard(browser='safari') 

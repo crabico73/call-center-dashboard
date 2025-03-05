@@ -24,8 +24,8 @@ Hope is an AI agent designed to demonstrate how modern technology and determinat
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/hope-ai.git
-cd hope-ai
+git clone https://github.com/crabico73/HOPE.git
+cd HOPE
 ```
 
 2. Create a virtual environment:
@@ -88,7 +88,7 @@ Private repository - All rights reserved
 
 ## Author
 
-Created by [Your Name]
+Created by Charles
 
 ## Acknowledgments
 

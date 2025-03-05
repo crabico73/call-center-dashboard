@@ -25,9 +25,15 @@ class User(Base, UserMixin):
 class AuthService:
     def __init__(self):
         """Initialize the auth service with database connection"""
-        app_data_dir = os.path.join(os.environ['LOCALAPPDATA'], 'CallCenterDashboard')
-        os.makedirs(app_data_dir, exist_ok=True)
-        db_path = os.path.join(app_data_dir, 'users.db')
+        # Store database in project directory
+        db_path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), 
+            '..', '..', 
+            'data',
+            'users.db'
+        ))
+        # Create data directory if it doesn't exist
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.engine = create_engine(f'sqlite:///{db_path}')
         
         # Create tables

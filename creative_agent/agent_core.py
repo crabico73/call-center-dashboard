@@ -1,153 +1,180 @@
+"""
+Core implementation of the Creative Agent
+"""
+
+import json
+import os
+import random
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-import json
-from datetime import datetime
 
 @dataclass
 class Resources:
-    """Track available resources and their costs"""
-    computer_specs = {
-        "cpu": "AMD Ryzen 9 7950X / Intel i9-13900K",
-        "gpu": "NVIDIA RTX 4080",
-        "ram": "64GB DDR5",
-        "storage": "4TB NVMe SSD",
-        "initial_cost": 3000.00
-    }
-    
-    internet_specs = {
-        "download": "1 Gbps",
-        "upload": "500 Mbps",
-        "monthly_cost": 80.00
-    }
-    
-    current_balance: float = 5000.00  # Starting budget including computer cost
-    monthly_expenses: float = 80.00   # Internet cost
-    available_tools: Dict[str, float] = None  # Tools and their costs
+    """Track Hope's resources and tools"""
+    computer_specs: Dict = None
+    internet_specs: Dict = None
+    available_tools: Dict = None
     
     def __post_init__(self):
-        self.available_tools = {
-            "Blender": 0.00,  # Free, professional 3D creation suite
-            "DaVinci Resolve": 0.00,  # Free version for video editing
-            "GIMP": 0.00,  # Free image editing
-            "Audacity": 0.00,  # Free audio editing
-            "OBS Studio": 0.00,  # Free recording/streaming
-            "Python": 0.00,  # Free programming language
-            "Git": 0.00,  # Free version control
+        self.computer_specs = {
+            "type": "Mid-range laptop",
+            "initial_cost": 1000.00
         }
-        self.current_balance -= self.computer_specs["initial_cost"]
+        
+        self.internet_specs = {
+            "type": "Home broadband",
+            "monthly_cost": 50.00
+        }
+        
+        self.available_tools = {
+            "Canva": 0.00,        # Free tier for design
+            "WordPress": 0.00,     # Free for blogging
+            "GitHub": 0.00,       # Free for coding
+            "Grammarly": 0.00,    # Free tier for writing
+            "OBS Studio": 0.00,   # Free for video recording
+        }
 
 class CreativeAgent:
-    def __init__(self):
+    """Core agent implementation for Hope AI"""
+    
+    def __init__(self, name: str, career_stage: str, work_hours: int, initial_skills: Dict[str, float]):
+        self.name = name
+        self.career_stage = career_stage.lower()
+        self.max_hours_per_day = work_hours
+        self.skills = initial_skills
+        
+        # Initialize state
+        self.earnings = 0.0
+        self.creator_share = 0.25
+        self.hours_worked_today = 0
+        self.jobs_completed = 0
+        self.strategy = "skill building"
+        self.patience = 100
+        self.motivation = 100
+        
+        # Initialize resources and tracking
         self.resources = Resources()
-        self.project_history = []
-        self.current_project = None
-        self.skills = {
-            "3D_Modeling": 1,
-            "Animation": 1,
-            "Video_Editing": 1,
-            "Scripting": 1,
-            "Sound_Design": 1,
-            "Project_Management": 1
-        }
-        self.revenue = 0.0
-        self.goals = {
-            "short_term": [
-                "Master basic 3D modeling in Blender",
-                "Create first short animation",
-                "Build social media presence",
-                "Generate first revenue stream"
-            ],
-            "medium_term": [
-                "Develop unique animation style",
-                "Build subscriber base",
-                "Create consistent revenue stream",
-                "Expand tool capabilities"
-            ],
-            "long_term": [
-                "Compete with studio-quality productions",
-                "Build sustainable animation business",
-                "Create original IP franchise",
-                "Scale operations with AI integration"
-            ]
-        }
-
-    def analyze_market_opportunity(self, content_type: str) -> Dict:
-        """Analyze current market opportunities for specific content types"""
-        opportunities = {
-            "animation": {
-                "platforms": ["YouTube", "TikTok", "Netflix Independent", "Vimeo"],
-                "trending_genres": ["Educational", "Sci-Fi", "Fantasy", "Slice of Life"],
-                "monetization": ["Ad Revenue", "Patreon", "Merchandise", "Licensing"],
-                "entry_barriers": "Low - Free tools available",
-                "competition_level": "Medium - Quality matters more than budget",
-                "growth_potential": "High - Multiple revenue streams possible"
-            }
-        }
-        return opportunities.get(content_type, {})
-
-    def plan_project(self, project_type: str, duration_days: int) -> Dict:
-        """Create a project plan with timeline and resource allocation"""
-        return {
-            "type": project_type,
-            "duration": duration_days,
-            "required_tools": self.resources.available_tools,
-            "estimated_costs": self._calculate_project_costs(duration_days),
-            "potential_revenue": self._estimate_revenue(project_type),
-            "skill_requirements": self._get_required_skills(project_type),
-            "timeline": self._create_timeline(duration_days)
-        }
-
-    def _calculate_project_costs(self, duration_days: int) -> float:
-        """Calculate project costs including utilities and tools"""
-        monthly_costs = self.resources.monthly_expenses
-        daily_cost = monthly_costs / 30
-        return daily_cost * duration_days
-
-    def _estimate_revenue(self, project_type: str) -> Dict:
-        """Estimate potential revenue streams for the project"""
-        return {
-            "ad_revenue": "Estimated $1-5 per 1000 views",
-            "patreon": "Potential $1-10 per patron per month",
-            "merchandise": "20-40% margin on print-on-demand items",
-            "licensing": "Variable based on usage rights"
-        }
-
-    def _get_required_skills(self, project_type: str) -> Dict:
-        """Determine required skills and current skill gaps"""
-        return {skill: level for skill, level in self.skills.items()}
-
-    def _create_timeline(self, duration_days: int) -> List[Dict]:
-        """Create a project timeline with milestones"""
-        return [
-            {"phase": "Pre-production", "days": duration_days * 0.2},
-            {"phase": "Production", "days": duration_days * 0.6},
-            {"phase": "Post-production", "days": duration_days * 0.2}
-        ]
-
-    def improve_skill(self, skill_name: str, hours_practiced: int):
-        """Improve a specific skill based on practice hours"""
-        if skill_name in self.skills:
-            self.skills[skill_name] += hours_practiced * 0.01
-            return f"Improved {skill_name} to level {self.skills[skill_name]:.2f}"
-        return "Skill not found"
-
-    def get_next_steps(self) -> List[str]:
-        """Get recommended next steps based on current state"""
-        return [
-            "Complete Blender Fundamentals course (free on Blender.org)",
-            "Create a 30-second animation test",
-            "Set up YouTube and social media channels",
-            "Join online animation communities for feedback",
-            "Start building portfolio with small projects"
-        ]
-
-    def generate_report(self) -> Dict:
-        """Generate a status report of current progress"""
-        return {
-            "current_balance": self.resources.current_balance,
-            "monthly_expenses": self.resources.monthly_expenses,
+        self.portfolio = []
+        self.client_feedback = []
+        self.successful_strategies = {}
+        self.failed_strategies = {}
+        self.production_company = None
+        
+        # Load previous state if exists
+        self.load_state()
+    
+    def load_state(self):
+        """Load agent state from disk"""
+        if os.path.exists("state.json"):
+            with open("state.json", "r") as f:
+                state = json.load(f)
+                self.__dict__.update(state)
+    
+    def save_state(self):
+        """Save agent state to disk"""
+        state = {
+            "earnings": self.earnings,
+            "jobs_completed": self.jobs_completed,
+            "strategy": self.strategy,
             "skills": self.skills,
-            "revenue": self.revenue,
-            "available_tools": self.resources.available_tools,
-            "next_steps": self.get_next_steps()
+            "portfolio": self.portfolio,
+            "client_feedback": self.client_feedback,
+            "creator_share": self.creator_share,
+            "hours_worked_today": self.hours_worked_today,
+            "career_stage": self.career_stage,
+            "production_company": self.production_company,
+            "successful_strategies": self.successful_strategies,
+            "failed_strategies": self.failed_strategies
+        }
+        
+        with open("state.json", "w") as f:
+            json.dump(state, f, indent=2)
+    
+    def get_status(self) -> Dict:
+        """Get current agent status"""
+        return {
+            "name": self.name,
+            "earnings": self.earnings,
+            "jobs_completed": self.jobs_completed,
+            "current_strategy": self.strategy,
+            "patience_level": self.patience,
+            "motivation_level": self.motivation,
+            "skills": self.skills,
+            "portfolio_size": len(self.portfolio),
+            "career_stage": self.career_stage,
+            "hours_worked_today": self.hours_worked_today,
+            "max_hours_per_day": self.max_hours_per_day,
+            "production_company": self.production_company
+        }
+    
+    def improve_skill(self, skill: str, hours: float = 1.0) -> bool:
+        """Improve a specific skill through practice"""
+        if skill in self.skills:
+            improvement = hours * 0.01 * (1 + random.random() * 0.5)
+            self.skills[skill] += improvement
+            return True
+        return False
+    
+    def check_career_progression(self):
+        """Check and update career stage based on progress"""
+        if self.career_stage == "beginner" and self.jobs_completed >= 20:
+            self.career_stage = "indie"
+            return True
+            
+        elif self.career_stage == "indie" and self.earnings > 5000:
+            self.career_stage = "professional"
+            return True
+            
+        elif self.career_stage == "professional" and self.earnings > 20000:
+            self.career_stage = "producer"
+            self.production_company = {
+                "name": f"{self.name} Productions",
+                "founded": time.strftime("%Y-%m-%d"),
+                "projects": []
+            }
+            return True
+            
+        return False
+    
+    def take_action(self) -> Optional[Dict]:
+        """Take a career action and return the results"""
+        if self.hours_worked_today >= self.max_hours_per_day:
+            return None
+            
+        # Simulate action results
+        hours_spent = random.randint(1, 4)
+        if self.hours_worked_today + hours_spent > self.max_hours_per_day:
+            hours_spent = self.max_hours_per_day - self.hours_worked_today
+            
+        self.hours_worked_today += hours_spent
+        
+        # Calculate success chance based on skills and strategy
+        avg_skill = sum(self.skills.values()) / len(self.skills)
+        success_chance = min(0.7 + (avg_skill * 0.1), 0.9)
+        
+        if random.random() < success_chance:
+            earnings = random.randint(50, 200) * (1 + (avg_skill - 1) * 0.5)
+            self.earnings += earnings
+            self.jobs_completed += 1
+            
+            return {
+                "success": True,
+                "hours_spent": hours_spent,
+                "earnings": earnings,
+                "skills_improved": [
+                    skill for skill in self.skills.keys()
+                    if self.improve_skill(skill, hours_spent * 0.2)
+                ]
+            }
+        
+        # Learning from failure
+        for skill in self.skills:
+            self.improve_skill(skill, hours_spent * 0.1)
+            
+        return {
+            "success": False,
+            "hours_spent": hours_spent,
+            "earnings": 0,
+            "skills_improved": list(self.skills.keys())
         } 
