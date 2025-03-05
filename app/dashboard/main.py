@@ -8,6 +8,8 @@ import dash_bootstrap_components as dbc
 from app.services.data_service import DataService
 from app.services.auth_service import AuthService
 from app.dashboard.auth_views import create_login_layout, create_user_menu, create_change_password_modal
+from app.dashboard.payment_views import create_payment_form, create_payment_success
+from app.services.payment_service import PaymentService
 import os
 import sys
 import webbrowser
@@ -17,19 +19,24 @@ from flask import request, session
 from functools import wraps
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_cors import CORS
+from app.services.business_rules import BusinessRules
 
 # Initialize services
 data_service = None
 auth_service = None
+payment_service = None
+business_rules = None
 login_manager = None
 
 def initialize_services():
     """Initialize all services"""
-    global data_service, auth_service, login_manager
+    global data_service, auth_service, payment_service, business_rules, login_manager
     
     try:
         data_service = DataService()
         auth_service = AuthService()
+        payment_service = PaymentService()
+        business_rules = BusinessRules()
         
         # Setup Flask-Login
         login_manager = LoginManager()
@@ -156,7 +163,8 @@ def get_dashboard_data():
     return {
         'daily_calls': data_service.get_daily_calls(),
         'current_stats': data_service.get_current_day_stats(),
-        'hourly_data': data_service.get_hourly_distribution()
+        'hourly_data': data_service.get_hourly_distribution(),
+        'contract_stats': business_rules.get_daily_stats()
     }
 
 # Create charts
@@ -239,11 +247,23 @@ def create_dashboard_layout():
         initial_data['hourly_data']
     )
     
+    # Add new contract goal card
+    contract_stats = initial_data['contract_stats']
+    contract_progress = (contract_stats['current'] / contract_stats['goal']) * 100 if contract_stats['goal'] > 0 else 0
+    
     return dbc.Container([
         # Header with user menu
         dbc.Row([
-            dbc.Col(html.H1("Call Center Dashboard", className="mb-4"), width=8),
-            dbc.Col(create_user_menu(current_user.username), width=4, className="text-right")
+            dbc.Col(html.H1("Call Center Dashboard", className="mb-4"), width=6),
+            dbc.Col([
+                create_user_menu(current_user.username),
+                dbc.Button(
+                    "Payment Setup",
+                    id="show-payment-form",
+                    color="success",
+                    className="ms-3"
+                )
+            ], width=6, className="text-right d-flex justify-content-end align-items-center")
         ], className="mt-4"),
         
         # KPI Cards
@@ -253,19 +273,42 @@ def create_dashboard_layout():
                     html.H4("Total Calls Today", className="card-title"),
                     html.H2(f"{initial_data['current_stats']['total_calls']:,.0f}", className="text-primary")
                 ])
-            ]), width=4),
+            ]), width=3),
             dbc.Col(dbc.Card([
                 dbc.CardBody([
                     html.H4("Success Rate", className="card-title"),
                     html.H2(f"{initial_data['current_stats']['success_rate']:.1%}", className="text-success")
                 ])
-            ]), width=4),
+            ]), width=3),
             dbc.Col(dbc.Card([
                 dbc.CardBody([
                     html.H4("Avg Duration", className="card-title"),
                     html.H2(f"{initial_data['current_stats']['avg_duration']:.0f}s", className="text-info")
                 ])
-            ]), width=4),
+            ]), width=3),
+            dbc.Col(dbc.Card([
+                dbc.CardBody([
+                    html.H4("Daily Contract Goal", className="card-title"),
+                    html.Div([
+                        html.H2([
+                            f"{contract_stats['current']}/{contract_stats['goal']}",
+                            html.Span(" Contracts", className="fs-6 ms-2")
+                        ], className="mb-2"),
+                        dbc.Progress(
+                            value=min(100, contract_progress),
+                            color="success" if contract_stats['current'] >= contract_stats['goal'] else "primary",
+                            className="mb-2",
+                            style={"height": "8px"}
+                        ),
+                        html.P([
+                            html.Strong(f"{contract_stats['remaining']} more"),
+                            " needed today"
+                        ] if contract_stats['remaining'] > 0 else [
+                            html.Strong("Daily Goal Reached!", className="text-success")
+                        ], className="mb-0 small")
+                    ])
+                ])
+            ]), width=3),
         ], className="mb-4"),
         
         # Charts
@@ -312,7 +355,13 @@ def create_dashboard_layout():
         ]),
         
         # Add change password modal
-        create_change_password_modal()
+        create_change_password_modal(),
+        
+        # Add payment form modal
+        dbc.Modal([
+            dbc.ModalHeader("Payment Setup"),
+            dbc.ModalBody(create_payment_form()),
+        ], id="payment-modal", size="xl")
     ], fluid=True)
 
 # Single callback to handle page content
@@ -449,6 +498,122 @@ def update_url(content):
     elif is_authenticated():
         return '/'
     return dash.no_update
+
+# Update payment form callback
+@app.callback(
+    [Output("payment-modal", "is_open"),
+     Output("page-content", "children"),
+     Output("payment-form-status", "children")],
+    [Input("show-payment-form", "n_clicks"),
+     Input("submit-payment-form", "n_clicks"),
+     Input("clear-payment-form", "n_clicks")],
+    [State("business-name", "value"),
+     State("dba-name", "value"),
+     State("tax-id", "value"),
+     State("years-business", "value"),
+     State("bank-name", "value"),
+     State("account-type", "value"),
+     State("routing-number", "value"),
+     State("account-number", "value"),
+     State("signer-name", "value"),
+     State("signer-title", "value"),
+     State("signer-email", "value"),
+     State("signer-phone", "value"),
+     State("agreement-checkbox", "checked"),
+     State("payment-modal", "is_open")],
+    prevent_initial_call=True
+)
+def handle_payment_form(show_clicks, submit_clicks, clear_clicks,
+                       business_name, dba_name, tax_id, years_business,
+                       bank_name, account_type, routing_number, account_number,
+                       signer_name, signer_title, signer_email, signer_phone,
+                       agreement_accepted, is_open):
+    """Handle payment form interactions"""
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return False, dash.no_update, ""
+    
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if button_id == "show-payment-form":
+        # Check if we can accept more contracts today
+        if not business_rules.can_accept_more_contracts():
+            stats = business_rules.get_daily_stats()
+            return False, dash.no_update, html.Div([
+                html.H4("Daily Goal Reached", className="text-success"),
+                html.P([
+                    f"We have reached our daily goal of {stats['goal']} contracts. ",
+                    "Please try again tomorrow."
+                ])
+            ])
+        return not is_open, dash.no_update, ""
+    
+    if button_id == "clear-payment-form":
+        return True, dash.no_update, ""
+    
+    if button_id == "submit-payment-form":
+        # Check if we can still accept contracts
+        if not business_rules.can_accept_more_contracts():
+            return True, dash.no_update, html.Div(
+                "Daily contract limit reached. Please try again tomorrow.",
+                className="text-danger"
+            )
+        
+        # Validate required fields
+        required_fields = {
+            "business_name": business_name,
+            "tax_id": tax_id,
+            "bank_name": bank_name,
+            "account_type": account_type,
+            "routing_number": routing_number,
+            "account_number": account_number,
+            "signer_name": signer_name,
+            "signer_title": signer_title,
+            "signer_email": signer_email,
+            "signer_phone": signer_phone
+        }
+        
+        if not all(required_fields.values()) or not agreement_accepted:
+            return True, dash.no_update, html.Div(
+                "Please fill in all required fields and accept the agreement.",
+                className="text-danger"
+            )
+        
+        try:
+            # Save payment information
+            payment_data = {
+                "business_name": business_name,
+                "dba_name": dba_name,
+                "tax_id": tax_id,
+                "years_business": years_business,
+                "bank_name": bank_name,
+                "account_type": account_type,
+                "routing_number": routing_number,
+                "account_number": account_number,
+                "signer_name": signer_name,
+                "signer_title": signer_title,
+                "signer_email": signer_email,
+                "signer_phone": signer_phone,
+                "agreement_accepted": agreement_accepted
+            }
+            
+            # Save payment info and record contract
+            if payment_service.save_payment_info(payment_data):
+                if business_rules.add_contract(business_name):
+                    return False, create_payment_success(), ""
+            
+            return True, dash.no_update, html.Div(
+                "An error occurred while saving your information. Please try again.",
+                className="text-danger"
+            )
+        except Exception as e:
+            print(f"Error processing payment form: {e}")
+            return True, dash.no_update, html.Div(
+                "An error occurred while processing your request.",
+                className="text-danger"
+            )
+    
+    return is_open, dash.no_update, ""
 
 def run_dashboard(debug=True, port=8050, browser=None):
     """Run the dashboard server
