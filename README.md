@@ -1,14 +1,14 @@
-# Hope AI - Creative Agent
+# Call-Center-Dashboard AI - Cold Callers
 
-An AI agent focused on building a career in film production and entertainment, starting from scratch with just a computer and internet connection.
+Our Agents make cold calls and the call itself is our sales pitch.
 
 ## Overview
 
-Hope is an AI agent designed to demonstrate how modern technology and determination can enable individual creators to compete with large studios. She starts with basic resources and works her way up through various stages of her career, from beginner to producer.
+Call centers have been fairly costly, setting a place to make calls and labor costs. We can save you fifty percent or more sometimes.
 
 ## Features
 
-- Career progression system (Beginner → Indie → Professional → Producer)
+-  (Beginner → Indie → Professional → Producer)
 - Skill development in multiple areas (acting, directing, video editing, etc.)
 - Strategic decision making based on past experiences
 - Project portfolio management
